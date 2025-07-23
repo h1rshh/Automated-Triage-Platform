@@ -1,0 +1,19 @@
+# Compiled output
+/target/
+/build/
+
+# IDE files
+.idea/
+*.iml
+*.iws
+
+# Log files
+*.log
+
+# Secret configuration file
+# This is the most important line for you!
+src/main/resources/application.properties
+
+# Operating System files
+.DS_Store
+Thumbs.db

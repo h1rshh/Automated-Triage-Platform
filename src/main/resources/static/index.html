@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alert Analysis Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; scroll-behavior: smooth; }
+        .spinner { border-top-color: #4f46e5; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .prose h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.25rem;}
+        .prose strong { color: #111827; }
+        .prose code { background-color: #e5e7eb; color: #1f2937; padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-family: monospace; }
+        .prose pre { background-color: #f3f4f6; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin-top: 0.5rem; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+<div class="container mx-auto p-4 md:p-6">
+    <header class="mb-6 text-center">
+        <p class="text-gray-600 mt-2">Automated Incident Analysis & Triage</p>
+    </header>
+
+    <!-- Control Panel -->
+    <div class="bg-white p-6 rounded-xl shadow-sm mb-6 border border-gray-200">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div class="flex-grow">
+                <label for="channelId" class="block text-sm font-medium text-gray-700 mb-1">Slack Channel ID</label>
+                <input type="text" id="channelId" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="Enter Slack Channel ID (e.g., C0XXXXXXX)">
+            </div>
+            <button id="fetchAlertsBtn" class="w-full sm:w-auto bg-indigo-600 text-white font-semibold px-4 py-2 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out self-end">
+                Fetch Alerts
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div id="mainContent" class="hidden">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">Recent Alerts</h2>
+        <div id="alertsContainer" class="space-y-3">
+            <!-- Alert list will be dynamically inserted here -->
+        </div>
+    </div>
+
+    <!-- Analysis Dashboard Area -->
+    <div id="analysisDashboard" class="hidden mt-8">
+        <!-- The full analysis UI will be injected here -->
+    </div>
+
+    <!-- Initial State & Loading Indicators -->
+    <div id="initialState" class="text-center py-16 text-gray-500">
+        <p>Enter a Slack Channel ID to begin.</p>
+    </div>
+    <div id="loading" class="text-center py-16 hidden">
+        <div class="spinner w-12 h-12 rounded-full border-4 border-gray-200 mx-auto"></div>
+        <p class="mt-4 text-gray-600">Fetching alerts...</p>
+    </div>
+    <div id="error" class="text-center py-16 hidden">
+        <p class="text-red-500 font-semibold">Could not fetch alerts. Please check the Channel ID and ensure the backend is running.</p>
+    </div>
+</div>
+
+<script>
+    // --- DOM Elements ---
+    const fetchAlertsBtn = document.getElementById('fetchAlertsBtn');
+    const channelIdInput = document.getElementById('channelId');
+    const mainContentDiv = document.getElementById('mainContent');
+    const alertsContainer = document.getElementById('alertsContainer');
+    const analysisDashboardDiv = document.getElementById('analysisDashboard');
+    const initialStateDiv = document.getElementById('initialState');
+    const loadingDiv = document.getElementById('loading');
+    const errorDiv = document.getElementById('error');
+
+    const API_BASE_URL = 'http://localhost:8080/api';
+
+    // --- Event Listeners ---
+    fetchAlertsBtn.addEventListener('click', handleFetchAlerts);
+
+    // --- Functions ---
+    async function handleFetchAlerts() {
+        const channelId = channelIdInput.value.trim();
+        if (!channelId) {
+            alert('Please enter a Slack Channel ID.');
+            return;
+        }
+
+        // Update UI state for loading
+        initialStateDiv.classList.add('hidden');
+        mainContentDiv.classList.add('hidden');
+        analysisDashboardDiv.classList.add('hidden');
+        errorDiv.classList.add('hidden');
+        loadingDiv.classList.remove('hidden');
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/alerts?channelId=${channelId}`);
+            if (!response.ok) throw new Error('Network response was not ok');
+            const alerts = await response.json();
+
+            mainContentDiv.classList.remove('hidden');
+            displayAlerts(alerts);
+        } catch (error) {
+            console.error('Fetch error:', error);
+            errorDiv.classList.remove('hidden');
+        } finally {
+            loadingDiv.classList.add('hidden');
+        }
+    }
+
+    function displayAlerts(alerts) {
+        alertsContainer.innerHTML = '';
+        if (alerts.length === 0) {
+            alertsContainer.innerHTML = '<p class="text-center text-gray-500">No recent alerts found.</p>';
+            return;
+        }
+
+        alerts.forEach(alert => {
+            const alertItem = document.createElement('div');
+            alertItem.className = 'bg-white p-3 rounded-lg shadow-sm border border-gray-200 flex justify-between items-center';
+            alertItem.innerHTML = `
+                <div>
+                    <p class="font-mono text-sm text-gray-800">${alert.info.split('*/')[1]?.trim().substring(0, 100) || alert.info.substring(0, 100)}...</p>
+                    <p class="text-xs text-gray-500 mt-1">DB: ${alert.database} | Status: <span class="font-semibold">${alert.status}</span> | Logged at: ${new Date(alert.loggedAt).toLocaleString()}</p>
+                </div>
+                <button data-alert-id="${alert.id}" class="analyze-btn bg-indigo-100 text-indigo-700 text-sm font-semibold px-3 py-1 rounded-full hover:bg-indigo-200 transition">Analyze</button>
+            `;
+            alertsContainer.appendChild(alertItem);
+        });
+
+        document.querySelectorAll('.analyze-btn').forEach(button => {
+            button.addEventListener('click', (e) => handleAnalysis(e, alerts));
+        });
+    }
+
+    async function handleAnalysis(event, allAlerts) {
+        const button = event.target;
+        const alertId = button.dataset.alertId;
+        const alertData = allAlerts.find(a => a.id === alertId);
+
+        // Show loading state in dashboard
+        analysisDashboardDiv.classList.remove('hidden');
+        analysisDashboardDiv.innerHTML = `
+            <div class="text-center py-16">
+                <div class="spinner w-12 h-12 rounded-full border-4 border-gray-200 mx-auto"></div>
+                <p class="mt-4 text-gray-600">Performing AI Analysis...</p>
+            </div>`;
+        window.scrollTo(0, analysisDashboardDiv.offsetTop);
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/analyze`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(alertData)
+            });
+            if (!response.ok) throw new Error('Analysis request failed');
+            const report = await response.json(); // Expecting the new AnalysisReport object
+
+            renderAnalysisDashboard(report);
+        } catch (error) {
+            console.error('Analysis error:', error);
+            analysisDashboardDiv.innerHTML = '<p class="text-center text-red-500 font-semibold">Failed to generate analysis.</p>';
+        }
+    }
+
+    function renderAnalysisDashboard(report) {
+        // Basic markdown to HTML conversion
+        const formattedAnalysis = report.llmAnalysisText
+            .replace(/\*\*(.*?)\*\*:/g, '<h3>$1:</h3>')
+            .replace(/\* (.*)/g, '<li>$1</li>')
+            .replace(/```java\n([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+            .replace(/`([^`]+)`/g, '<code>$1</code>');
+
+        const schemaHtml = report.dbSchema.map(col => `<li><strong>${col.columnName}</strong>: ${col.dataType}(${col.size})</li>`).join('');
+
+        analysisDashboardDiv.innerHTML = `
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Left Column: Main Analysis -->
+                <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+                    <h2 class="text-2xl font-bold text-gray-900 mb-4">AI Analysis Report</h2>
+                    <div class="prose max-w-none">${formattedAnalysis}</div>
+                </div>
+
+                <!-- Right Column: Context Cards -->
+                <div class="space-y-6">
+                    <div class="bg-white p-4 rounded-xl shadow-lg border border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-3">Alert Metadata</h3>
+                        <ul class="text-sm space-y-2">
+                            <li><strong>Database:</strong> <code>${report.originalAlert.database}</code></li>
+                            <li><strong>User:</strong> <code>${report.originalAlert.user}</code></li>
+                            <li><strong>Host:</strong> <code>${report.originalAlert.host}</code></li>
+                            <li><strong>Status:</strong> <span class="font-semibold">${report.originalAlert.status}</span></li>
+                            <li><strong>Duration:</strong> ${report.originalAlert.timeInSec} seconds</li>
+                        </ul>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-lg border border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-3">Code Context</h3>
+                         <ul class="text-sm space-y-2">
+                            <li><strong>Filename:</strong> <code>${report.codeContext.filename || 'N/A'}</code></li>
+                            <li><strong>Function:</strong> <code>${report.originalAlert.function || 'N/A'}</code></li>
+                        </ul>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-lg border border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-3">Database Schema</h3>
+                        <ul class="text-sm space-y-2">${schemaHtml || '<li>No schema found.</li>'}</ul>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+</script>
+</body>
+</html>
